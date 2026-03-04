@@ -1,0 +1,246 @@
+{% extends "dashboards/base.html" %}
+
+{% block title %}Clinician Dashboard{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
+{% endblock %}
+
+{% block content %}
+
+<h2 class="mb-4">Clinician Dashboard</h2>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <div class="row align-items-end g-3">
+      <div class="col-md-6">
+        <label class="form-label">Select patient</label>
+        <select id="patientSelect" class="form-select" onchange="reloadAll()">
+          {% for p in patients %}
+          <option value="{{p.id}}">{{p.username}}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-md-6 text-md-end">
+        <div class="btn-group" role="group" aria-label="Time range">
+          <button class="btn btn-outline-primary btn-sm" onclick="loadTimeline(24)">Last 24h</button>
+          <button class="btn btn-outline-primary btn-sm" onclick="loadTimeline(6)">Last 6h</button>
+          <button class="btn btn-outline-primary btn-sm" onclick="loadTimeline(1)">Last 1h</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="timeline" class="mt-3" style="height: 420px"></div>
+
+    <div class="small text-muted mt-2">
+      Tip: “Flagged” shows frames marked <code>flagged_for_review</code> (0/1). Peak shows <code>peak_pressure_index</code>.
+    </div>
+  </div>
+</div>
+
+<div class="row g-4 mt-1">
+  <div class="col-md-5">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h5 class="card-title">Alert Review / Flagged Periods</h5>
+        <p class="mb-0">
+          Use the timeline: points where <strong>high_pressure_detected</strong> or
+          <strong>flagged_for_review</strong> are true.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-7">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center">
+          <h5 class="card-title mb-0">Patient Comments (reply in context)</h5>
+          <button class="btn btn-outline-secondary btn-sm" onclick="loadComments()">Refresh</button>
+        </div>
+
+        <div id="comments" class="mt-3"></div>
+
+        <div id="commentsEmpty" class="text-muted small d-none">
+          No comments yet for this patient.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm mt-4">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center">
+      <h5 class="card-title mb-0">Alerts (High Pressure)</h5>
+      <div class="btn-group">
+        <button class="btn btn-outline-primary btn-sm" onclick="loadAlerts(24)">24h</button>
+        <button class="btn btn-outline-primary btn-sm" onclick="loadAlerts(6)">6h</button>
+        <button class="btn btn-outline-primary btn-sm" onclick="loadAlerts(1)">1h</button>
+      </div>
+    </div>
+
+    <div id="alertsList" class="mt-3"></div>
+    <div id="alertsEmpty" class="text-muted small d-none">No alerts in this window.</div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  function patientId() {
+    return document.getElementById("patientSelect").value;
+  }
+
+  async function loadTimeline(hours) {
+    const r = await fetch(`/api/clinician/${patientId()}/timeline/?hours=${hours}`);
+    const data = await r.json();
+    if (!data.ok) return;
+
+    const x = data.points.map((p) => p.timestamp);
+    const peak = data.points.map((p) => p.peak_pressure_index);
+    const flagged = data.points.map((p) => (p.flagged_for_review ? 1 : 0));
+
+    Plotly.react(
+      "timeline",
+      [
+        { x, y: peak, name: "Peak Pressure", type: "scatter" },
+        { x, y: flagged, name: "Flagged", type: "scatter", yaxis: "y2" },
+      ],
+      {
+        margin: { t: 30 },
+        yaxis: { title: "Peak" },
+        yaxis2: { title: "Flagged (0/1)", overlaying: "y", side: "right" },
+        legend: { orientation: "h" },
+      }
+    );
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  async function loadComments() {
+    const r = await fetch(`/api/clinician/${patientId()}/comments/`);
+    const data = await r.json();
+    if (!data.ok) return;
+
+    const root = document.getElementById("comments");
+    const empty = document.getElementById("commentsEmpty");
+
+    root.innerHTML = "";
+
+    if (!data.comments || data.comments.length === 0) {
+      empty.classList.remove("d-none");
+      return;
+    } else {
+      empty.classList.add("d-none");
+    }
+
+    data.comments.forEach((c) => {
+      const div = document.createElement("div");
+      div.className = "border-top pt-3 mt-3";
+
+      const repliesHtml = (c.replies || [])
+        .map((r) => `<div class="ms-3 text-muted small">↳ ${escapeHtml(r.text)}</div>`)
+        .join("");
+
+      div.innerHTML = `
+        <div class="fw-semibold">${escapeHtml(c.timestamp)}</div>
+        <div class="mb-2">${escapeHtml(c.text)}</div>
+        <div class="mb-2">${repliesHtml}</div>
+
+        <textarea class="form-control form-control-sm mb-2" rows="2"
+          id="reply_${c.id}" placeholder="Write a reply..."></textarea>
+
+        <button class="btn btn-primary btn-sm" onclick="sendReply(${c.id})">Reply</button>
+      `;
+
+      root.appendChild(div);
+    });
+  }
+
+  async function sendReply(commentId) {
+    const text = document.getElementById(`reply_${commentId}`).value.trim();
+    if (!text) return;
+
+    const form = new FormData();
+    form.append("comment_id", commentId);
+    form.append("text", text);
+
+    const r = await fetch("/api/clinician/reply/", {
+      method: "POST",
+      body: form,
+    });
+
+    const data = await r.json();
+    if (data.ok) loadComments();
+  }
+
+async function loadAlerts(hours) {
+  const r = await fetch(`/api/clinician/${patientId()}/alerts/?hours=${hours}`);
+  const data = await r.json();
+  if (!data.ok) return;
+
+  const root = document.getElementById("alertsList");
+  const empty = document.getElementById("alertsEmpty");
+  root.innerHTML = "";
+
+  if (!data.alerts || data.alerts.length === 0) {
+    empty.classList.remove("d-none");
+    return;
+  }
+  empty.classList.add("d-none");
+
+  data.alerts.forEach(a => {
+    const div = document.createElement("div");
+    div.className = "border-top pt-2 mt-2";
+
+    const btnText = a.flagged_for_review ? "Unflag" : "Flag";
+    const btnFlag = a.flagged_for_review ? "0" : "1";
+
+    div.innerHTML = `
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <div class="fw-semibold">${a.timestamp}</div>
+          <div class="small text-muted">
+            Peak: ${a.peak_pressure_index} | Area%: ${Number(a.contact_area_pct || 0).toFixed(2)}
+          </div>
+          ${a.flagged_for_review ? `<span class="badge bg-warning text-dark mt-1">Flagged</span>` : ``}
+        </div>
+        <button class="btn btn-sm btn-outline-warning" onclick="toggleFlag(${a.id}, ${btnFlag})">${btnText}</button>
+      </div>
+    `;
+    root.appendChild(div);
+  });
+}
+
+async function toggleFlag(frameId, flag) {
+  const form = new FormData();
+  form.append("frame_id", frameId);
+  form.append("flag", String(flag));
+
+  const r = await fetch("/api/clinician/flag-frame/", { method: "POST", body: form });
+  const data = await r.json();
+  if (data.ok) {
+    loadAlerts(24);
+    loadTimeline(24); // optional: refresh chart so flagged points match
+  }
+}
+
+  function reloadAll() {
+  loadTimeline(24);
+  loadComments();
+  loadAlerts(24);
+}
+
+  reloadAll();
+</script>
+{% endblock %}
