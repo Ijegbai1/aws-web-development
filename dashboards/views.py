@@ -11,6 +11,7 @@ from django.utils.decorators import method_decorator
 from django.shortcuts import redirect
 from accounts.models import Role
 from sensors.models import PressureFrame, AlertEvent, PatientComment, ClinicianReply
+from django.db import models
 
 def home(request):
     if not request.user.is_authenticated:
@@ -42,6 +43,7 @@ def patient_latest_frame_api(request):
         "peak_pressure_index": frame.peak_pressure_index,
         "contact_area_pct": frame.contact_area_pct,
         "high_pressure_detected": frame.high_pressure_detected,
+        "predicted_risk_score": frame.predicted_risk_score,
     })
 
 @role_required(Role.PATIENT)
@@ -224,6 +226,28 @@ def clinician_reply(request):
     return JsonResponse({"ok": True})
 
 @role_required(Role.CLINICIAN)
+def clinician_patient_risk_api(request, patient_id):
+    if not ClinicianPatient.objects.filter(clinician=request.user, patient_id=patient_id).exists():
+        return JsonResponse({"ok": False, "error": "Not assigned"})
+    hours = int(request.GET.get("hours", "24"))
+
+    qs_all = PressureFrame.objects.filter(patient_id=patient_id)
+    latest_ts = qs_all.order_by("-timestamp").values_list("timestamp", flat=True).first()
+    if not latest_ts:
+        return JsonResponse({"ok": True, "points": []})
+    end = latest_ts
+    start = end - timedelta(hours=hours)
+
+    qs = (
+        qs_all
+        .filter(timestamp__gte=start, timestamp__lte=end)
+        .order_by("timestamp")
+        .values("timestamp", "predicted_risk_score")
+    )
+
+    return JsonResponse({"ok": True, "points": list(qs)})
+
+@role_required(Role.CLINICIAN)
 def clinician_patient_alerts_api(request, patient_id):
     if not ClinicianPatient.objects.filter(clinician=request.user, patient_id=patient_id).exists():
         return JsonResponse({"ok": False, "error": "Not assigned"})
@@ -267,3 +291,76 @@ def clinician_flag_frame(request):
     frame.save(update_fields=["flagged_for_review"])
 
     return JsonResponse({"ok": True, "flagged_for_review": frame.flagged_for_review})
+
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet
+from django.http import HttpResponse
+import io
+
+@role_required(Role.CLINICIAN)
+def clinician_generate_report(request, patient_id):
+
+    if not ClinicianPatient.objects.filter(
+        clinician=request.user,
+        patient_id=patient_id
+    ).exists():
+        return JsonResponse({"ok": False, "error": "Not assigned"})
+
+    patient = get_object_or_404(User, id=patient_id)
+
+    qs = PressureFrame.objects.filter(patient=patient)
+
+    total_frames = qs.count()
+    total_alerts = qs.filter(high_pressure_detected=True).count()
+    total_flagged = qs.filter(flagged_for_review=True).count()
+
+    peak_max = qs.order_by("-peak_pressure_index").values_list("peak_pressure_index", flat=True).first() or 0
+    peak_avg = qs.aggregate(models.Avg("peak_pressure_index"))["peak_pressure_index__avg"] or 0
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4)
+    elements = []
+    styles = getSampleStyleSheet()
+
+    elements.append(Paragraph(f"Clinical Report for {patient.username}", styles["Heading1"]))
+    elements.append(Spacer(1, 12))
+
+    data = [
+        ["Total Frames", total_frames],
+        ["Total Alerts", total_alerts],
+        ["Flagged for Review", total_flagged],
+        ["Max Peak Pressure", round(peak_max, 2)],
+        ["Average Peak Pressure", round(peak_avg, 2)],
+    ]
+
+    table = Table(data)
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+        ("GRID", (0, 0), (-1, -1), 1, colors.grey),
+    ]))
+
+    elements.append(table)
+    elements.append(Spacer(1, 20))
+
+    comments = PatientComment.objects.filter(frame__patient=patient)
+
+    elements.append(Paragraph("Patient Comments & Clinician Replies", styles["Heading2"]))
+    elements.append(Spacer(1, 12))
+
+    for c in comments:
+        elements.append(Paragraph(f"{c.timestamp}: {c.text}", styles["Normal"]))
+        for r in c.replies.all():
+            elements.append(Paragraph(f"   ↳ {r.text}", styles["Normal"]))
+        elements.append(Spacer(1, 8))
+
+    doc.build(elements)
+
+    pdf = buffer.getvalue()
+    buffer.close()
+
+    response = HttpResponse(content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="report_{patient.username}.pdf"'
+    response.write(pdf)
+    return response

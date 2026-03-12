@@ -136,34 +136,39 @@ Patient Dashboard
   }
 
   async function fetchLatest() {
-    const r = await fetch("/api/patient/latest-frame/");
-    const data = await r.json();
-    if (!data.ok) return;
+  const r = await fetch("/api/patient/latest-frame/");
+  const data = await r.json();
+  if (!data.ok) return;
 
-    latestTs = data.timestamp;
-    document.getElementById("currentTs").innerText = "Timestamp: " + latestTs;
+  latestTs = data.timestamp;
+  document.getElementById("currentTs").innerText = "Timestamp: " + latestTs;
 
-    Plotly.react(
-      "heatmap",
-      [{ z: data.frame, type: "heatmap" }],
-      { margin: { t: 10, r: 10, b: 10, l: 10 } },
-      { displayModeBar: false },
-    );
+  Plotly.react(
+    "heatmap",
+    [{ z: data.frame, type: "heatmap" }],
+    { margin: { t: 10, r: 10, b: 10, l: 10 } },
+    { displayModeBar: false }
+  );
 
-    document.getElementById("metrics").innerHTML =
-      `<strong>Peak Pressure Index:</strong> ${data.peak_pressure_index}<br/>
-       <strong>Contact Area %:</strong> ${Number(data.contact_area_pct || 0).toFixed(2)}%`;
+  document.getElementById("metrics").innerHTML =
+     `<strong>Peak Pressure Index:</strong> ${data.peak_pressure_index}<br/>
+     <strong>Contact Area %:</strong> ${data.contact_area_pct !== null && data.contact_area_pct !== undefined ? Number(data.contact_area_pct).toFixed(2) : "N/A"}%</br>
+     <strong>Predicted Risk Score:</strong> <span class="badge bg-warning text-dark">${(Number(data.predicted_risk_score || 0) * 100).toFixed(2)}%</span></br>`
 
-    const alertBox = document.getElementById("alertBox");
-    if (data.high_pressure_detected) {
-      alertBox.classList.remove("d-none");
-      alertBox.innerHTML =
-        "<strong>High pressure detected.</strong> Please reposition yourself.";
-    } else {
-      alertBox.classList.add("d-none");
-    }
+  const alertBox = document.getElementById("alertBox");
+
+  if (data.high_pressure_detected) {
+    alertBox.classList.remove("d-none");
+    alertBox.innerHTML =
+      "<strong>High pressure detected.</strong> Please reposition yourself.";
+  } else if ((data.predicted_risk_score || 0) >= 0.7) {
+    alertBox.classList.remove("d-none");
+    alertBox.innerHTML =
+      "<strong>High predicted risk.</strong> Please reposition soon to reduce pressure build-up.";
+  } else {
+    alertBox.classList.add("d-none");
   }
-
+}
   async function loadMetrics(hours) {
     const r = await fetch(`/api/patient/metrics/?hours=${hours}`);
     const data = await r.json();
