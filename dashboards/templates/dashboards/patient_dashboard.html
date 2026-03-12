@@ -9,6 +9,44 @@ Patient Dashboard
 
 <h2 class="mb-4">Patient Dashboard</h2>
 
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="card shadow-sm text-center">
+      <div class="card-body">
+        <h6 class="text-muted">Peak Pressure</h6>
+        <div id="summaryPeak" class="fs-4 fw-bold">--</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="card shadow-sm text-center">
+      <div class="card-body">
+        <h6 class="text-muted">Contact Area %</h6>
+        <div id="summaryArea" class="fs-4 fw-bold">--</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+  <div class="card shadow-sm text-center" id="summaryRiskCard">
+    <div class="card-body">
+      <h6 class="text-muted">Predicted Risk</h6>
+      <div id="summaryRisk" class="fs-4 fw-bold">--</div>
+    </div>
+  </div>
+</div>
+
+  <div class="col-md-3">
+    <div class="card shadow-sm text-center">
+      <div class="card-body">
+        <h6 class="text-muted">Alert Status</h6>
+        <div id="summaryAlert" class="fs-5 fw-bold">--</div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="alertBox" class="alert alert-danger d-none"></div>
 
 <div class="row g-4">
@@ -152,8 +190,36 @@ Patient Dashboard
 
   document.getElementById("metrics").innerHTML =
      `<strong>Peak Pressure Index:</strong> ${data.peak_pressure_index}<br/>
-     <strong>Contact Area %:</strong> ${data.contact_area_pct !== null && data.contact_area_pct !== undefined ? Number(data.contact_area_pct).toFixed(2) : "N/A"}%</br>
-     <strong>Predicted Risk Score:</strong> <span class="badge bg-warning text-dark">${(Number(data.predicted_risk_score || 0) * 100).toFixed(2)}%</span></br>`
+     <strong>Contact Area %:</strong> ${data.contact_area_pct !== null && data.contact_area_pct !== undefined ? Number(data.contact_area_pct).toFixed(2) : "N/A"}%<br/>
+     <strong>Predicted Risk Score:</strong> <span class="badge bg-warning text-dark">${(Number(data.predicted_risk_score || 0) * 100).toFixed(2)}%</span><br/>`;
+
+  document.getElementById("summaryPeak").innerText = data.peak_pressure_index ?? "--";
+  document.getElementById("summaryArea").innerText = `${Number(data.contact_area_pct || 0).toFixed(2)}%`;
+  document.getElementById("summaryRisk").innerText = `${(Number(data.predicted_risk_score || 0) * 100).toFixed(2)}%`;
+
+  const riskCard = document.getElementById("summaryRiskCard");
+  const riskScore = Number(data.predicted_risk_score || 0);
+
+  riskCard.classList.remove("border-success", "border-warning", "border-danger", "bg-success-subtle", "bg-warning-subtle", "bg-danger-subtle");
+
+  if (riskScore >= 0.7) {
+    riskCard.classList.add("border-danger", "bg-danger-subtle");
+  } else if (riskScore >= 0.3) {
+    riskCard.classList.add("border-warning", "bg-warning-subtle");
+  } else {
+    riskCard.classList.add("border-success", "bg-success-subtle");
+  }
+
+  if (data.high_pressure_detected) {
+  document.getElementById("summaryAlert").innerHTML =
+    `<span class="badge bg-danger">High Pressure</span>`;
+  } else if ((data.predicted_risk_score || 0) >= 0.7) {
+  document.getElementById("summaryAlert").innerHTML =
+    `<span class="badge bg-warning text-dark">Predicted Risk</span>`;
+  } else {
+  document.getElementById("summaryAlert").innerHTML =
+    `<span class="badge bg-success">Stable</span>`;
+  }
 
   const alertBox = document.getElementById("alertBox");
 

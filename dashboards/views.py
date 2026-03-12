@@ -225,6 +225,51 @@ def clinician_reply(request):
     ClinicianReply.objects.create(clinician=request.user, comment=comment, text=text)
     return JsonResponse({"ok": True})
 
+from django.db.models import Max, Count
+
+@role_required(Role.CLINICIAN)
+def clinician_patient_summary_api(request, patient_id):
+    if not ClinicianPatient.objects.filter(clinician=request.user, patient_id=patient_id).exists():
+        return JsonResponse({"ok": False, "error": "Not assigned"})
+
+    qs_all = PressureFrame.objects.filter(patient_id=patient_id)
+    latest_ts = qs_all.order_by("-timestamp").values_list("timestamp", flat=True).first()
+
+    if not latest_ts:
+        return JsonResponse({
+            "ok": True,
+            "alerts_count": 0,
+            "highest_risk": 0,
+            "flagged_count": 0,
+            "comments_count": 0,
+        })
+
+    end = latest_ts
+    start = end - timedelta(hours=24)
+
+    window_frames = qs_all.filter(timestamp__gte=start, timestamp__lte=end)
+
+    alerts_count = window_frames.filter(high_pressure_detected=True).count()
+    flagged_count = window_frames.filter(flagged_for_review=True).count()
+
+    highest_risk = (
+        window_frames.aggregate(m=Max("predicted_risk_score"))["m"] or 0
+    )
+
+    comments_count = (
+        PatientComment.objects
+        .filter(frame__patient_id=patient_id, frame__timestamp__gte=start, frame__timestamp__lte=end)
+        .count()
+    )
+
+    return JsonResponse({
+        "ok": True,
+        "alerts_count": alerts_count,
+        "highest_risk": highest_risk,
+        "flagged_count": flagged_count,
+        "comments_count": comments_count,
+    })
+
 @role_required(Role.CLINICIAN)
 def clinician_patient_risk_api(request, patient_id):
     if not ClinicianPatient.objects.filter(clinician=request.user, patient_id=patient_id).exists():
