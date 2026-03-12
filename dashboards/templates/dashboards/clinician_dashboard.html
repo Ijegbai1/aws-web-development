@@ -10,6 +10,44 @@
 
 <h2 class="mb-4">Clinician Dashboard</h2>
 
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="card shadow-sm text-center">
+      <div class="card-body">
+        <h6 class="text-muted">Alerts (24h)</h6>
+        <div id="summaryAlerts" class="fs-4 fw-bold">--</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="card shadow-sm text-center">
+      <div class="card-body">
+        <h6 class="text-muted">Highest Risk (24h)</h6>
+        <div id="summaryHighestRisk" class="fs-4 fw-bold">--</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="card shadow-sm text-center">
+      <div class="card-body">
+        <h6 class="text-muted">Flagged Frames</h6>
+        <div id="summaryFlagged" class="fs-4 fw-bold">--</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="card shadow-sm text-center">
+      <div class="card-body">
+        <h6 class="text-muted">Patient Comments</h6>
+        <div id="summaryComments" class="fs-4 fw-bold">--</div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="card shadow-sm">
   <div class="card-body">
     <div class="row align-items-end g-3">
@@ -205,6 +243,18 @@
     if (data.ok) loadComments();
   }
 
+async function loadSummary() {
+  const r = await fetch(`/api/clinician/${patientId()}/summary/`);
+  const data = await r.json();
+  if (!data.ok) return;
+
+  document.getElementById("summaryAlerts").innerText = data.alerts_count ?? 0;
+  document.getElementById("summaryHighestRisk").innerText =
+    `${(Number(data.highest_risk || 0) * 100).toFixed(2)}%`;
+  document.getElementById("summaryFlagged").innerText = data.flagged_count ?? 0;
+  document.getElementById("summaryComments").innerText = data.comments_count ?? 0;
+}
+
 async function loadAlerts(hours) {
   const r = await fetch(`/api/clinician/${patientId()}/alerts/?hours=${hours}`);
   const data = await r.json();
@@ -283,12 +333,13 @@ function updateReportLink() {
   document.getElementById("reportBtn").href = `/clinician/${pid}/report/`;
 }
 
-  function reloadAll() {
+ function reloadAll() {
   loadTimeline(24);
   loadComments();
   loadAlerts(24);
   loadRisk(24);
   updateReportLink();
+  loadSummary();
 }
 
 updateReportLink();
