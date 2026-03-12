@@ -21,4 +21,6 @@ urlpatterns = [
     path("api/clinician/reply/", views.clinician_reply),
     path("api/clinician/<int:patient_id>/alerts/", views.clinician_patient_alerts_api),
     path("api/clinician/flag-frame/", views.clinician_flag_frame),
+    path("clinician/<int:patient_id>/report/", views.clinician_generate_report),
+    path("api/clinician/<int:patient_id>/risk/", views.clinician_patient_risk_api),
 ]
