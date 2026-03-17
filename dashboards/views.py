@@ -12,15 +12,35 @@ from django.shortcuts import redirect
 from accounts.models import Role
 from sensors.models import PressureFrame, AlertEvent, PatientComment, ClinicianReply
 from django.db import models
+from datetime import timedelta
+
+def collapse_alert_frames(frames, gap_seconds=60):
+    """
+    Collapse many flagged frames into alert episodes.
+    Keeps the first frame of each episode.
+    """
+    episodes = []
+    last_ts = None
+
+    for f in frames:
+        ts = f["timestamp"]
+
+        if last_ts is None or (ts - last_ts).total_seconds() > gap_seconds:
+            episodes.append(f)
+
+        last_ts = ts
+
+    return episodes
 
 def home(request):
     if not request.user.is_authenticated:
-        return redirect("login")
+        return render(request, "dashboards/landing.html")
 
     if request.user.role == Role.PATIENT:
         return redirect("patient_dashboard")
     if request.user.role == Role.CLINICIAN:
         return redirect("clinician_dashboard")
+
     return redirect("/admin/")
 
 @role_required(Role.PATIENT)
@@ -114,12 +134,19 @@ def patient_alerts_api(request):
     end = latest_ts
     start = end - timedelta(hours=hours)
 
-    qs = (
-        qs_all.filter(timestamp__gte=start, timestamp__lte=end, high_pressure_detected=True)
-        .order_by("-timestamp")
+    frames = list(
+        qs_all.filter(
+            timestamp__gte=start,
+            timestamp__lte=end,
+            high_pressure_detected=True
+        )
+        .order_by("timestamp")
         .values("id", "timestamp", "peak_pressure_index", "contact_area_pct", "flagged_for_review")
     )
-    return JsonResponse({"ok": True, "alerts": list(qs)})
+
+    alerts = collapse_alert_frames(frames, gap_seconds=60)
+
+    return JsonResponse({"ok": True, "alerts": alerts})
 
 @role_required(Role.CLINICIAN)
 def clinician_dashboard(request):
@@ -307,12 +334,19 @@ def clinician_patient_alerts_api(request, patient_id):
     end = latest_ts
     start = end - timedelta(hours=hours)
 
-    qs = (
-        qs_all.filter(timestamp__gte=start, timestamp__lte=end, high_pressure_detected=True)
-        .order_by("-timestamp")
+    frames = list(
+        qs_all.filter(
+            timestamp__gte=start,
+            timestamp__lte=end,
+            high_pressure_detected=True
+        )
+        .order_by("timestamp")
         .values("id", "timestamp", "peak_pressure_index", "contact_area_pct", "flagged_for_review")
     )
-    return JsonResponse({"ok": True, "alerts": list(qs)})
+
+    alerts = collapse_alert_frames(frames, gap_seconds=30)
+
+    return JsonResponse({"ok": True, "alerts": alerts})
 
 @csrf_exempt
 @role_required(Role.CLINICIAN)

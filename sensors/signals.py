@@ -20,8 +20,8 @@ def compute_metrics(sender, instance: PressureFrame, **kwargs):
 
     hp = high_pressure(
         instance.frame,
-        high_threshold=2000,
-        hotspot_pixels=10
+        high_threshold=120,
+        hotspot_pixels=5
     )
 
     instance.high_pressure_detected = hp
