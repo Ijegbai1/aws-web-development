@@ -1,0 +1,86 @@
+{% extends "dashboards/base.html" %}
+
+{% block title %}Graphene Trace{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-11">
+
+    <div class="card shadow-sm border-0 mt-4 overflow-hidden">
+      <div class="card-body p-5 text-center">
+
+        <div class="mb-3">
+          <span class="badge bg-dark px-3 py-2">Clinical Pressure Monitoring Platform</span>
+        </div>
+
+        <h1 class="display-4 fw-bold mb-3">Graphene Trace</h1>
+
+        <p class="lead text-muted mx-auto mb-4" style="max-width: 900px;">
+          A smart clinical pressure monitoring platform for patients and clinicians,
+          combining live heatmaps, pressure analytics, alert detection, two-way communication,
+          PDF reporting, and AI-based risk prediction.
+        </p>
+
+        <div class="d-flex flex-column flex-md-row justify-content-center gap-3 mb-5">
+          <a href="/accounts/login/" class="btn btn-primary btn-lg px-4">
+            Patient Login
+          </a>
+          <a href="/accounts/login/" class="btn btn-outline-primary btn-lg px-4">
+            Clinician Login
+          </a>
+          <a href="/admin/" class="btn btn-outline-secondary btn-lg px-4">
+            Admin
+          </a>
+        </div>
+
+        <div class="row g-4 text-start">
+          <div class="col-md-4">
+            <div class="card h-100 shadow-sm border-0">
+              <div class="card-body">
+                <div class="fs-2 mb-3">🩺</div>
+                <h5 class="card-title">Patient Monitoring</h5>
+                <p class="card-text text-muted">
+                  View live pressure heatmaps, monitor pressure metrics over time,
+                  receive alerts, and send comments linked to specific sensor timestamps.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-4">
+            <div class="card h-100 shadow-sm border-0">
+              <div class="card-body">
+                <div class="fs-2 mb-3">📊</div>
+                <h5 class="card-title">Clinician Review</h5>
+                <p class="card-text text-muted">
+                  Review patient alerts, monitor risk trends, respond to patient feedback,
+                  and flag high-risk pressure frames for follow-up.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-4">
+            <div class="card h-100 shadow-sm border-0">
+              <div class="card-body">
+                <div class="fs-2 mb-3">🤖</div>
+                <h5 class="card-title">AI & Reporting</h5>
+                <p class="card-text text-muted">
+                  Use AI-based predicted risk scores for proactive care and generate PDF reports
+                  for documentation and clinical communication.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="text-center text-muted small mt-4 mb-3">
+      Graphene Trace © 2026 · Secure role-based medical pressure monitoring system
+    </div>
+
+  </div>
+</div>
+{% endblock %}
