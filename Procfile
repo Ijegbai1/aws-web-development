@@ -1,0 +1,1 @@
+web: gunicorn graphene_trace.wsgi
